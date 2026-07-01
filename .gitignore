@@ -1,0 +1,25 @@
+# Secrets — never commit
+*.key
+.openrouter-key
+.env
+.env.*
+secrets/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Node / Python build artifacts
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+dist/
+build/
+
+# Local scratch / generated council outputs (live in ~/Documents/Local/council-log)
+scratchpad/
+*.local.md

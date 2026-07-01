@@ -1,0 +1,422 @@
+<!--
+LLM Council Report Template — "War Room" (refined dark editorial)
+Self-contained single HTML file. Replace {{placeholders}} at generation time.
+
+Aesthetic: near-black editorial verdict. Bricolage Grotesque (display) over a
+Newsreader serif reading body; JetBrains Mono for figures/labels. One restrained
+emerald accent. No neon glow, no glassmorphism-on-everything, one eyebrow.
+The renderer (render_report.py) emits the vote bar, kind/stance chips and cards
+as CLASS-based markup that the CSS below styles — keep the two in lockstep.
+
+Placeholders the skill must fill:
+  {{question_raw}}        — user's original question (H1)
+  {{question_framed}}     — neutral framing used by advisors (preformatted spec)
+  {{timestamp}}           — date+time of council session
+  {{slug}}                — kebab-case slug used in filenames
+  {{mode}}                — "Models" | "Figures" | "Styles" | "Mixed" | "Senate"
+  {{mode_banner}}         — <div class="mode-banner[ simulated]">…</div> honesty banner
+  {{diversity_scorecard}} — <div class="scorecard">…metrics…</div> panel
+  {{senate_vote}}         — Senate-only vote block (empty for modes 1-4)
+  {{senate_factions}}     — Senate-only faction map (empty for modes 1-4)
+  {{committee_briefs}}    — Senate-only committee briefs (empty for modes 1-4)
+  {{verdict_one_thing}}   — chairman's "The One Thing to Do First" (string)
+  {{verdict_recommendation}} {{verdict_agrees}} {{verdict_clashes}}
+  {{verdict_blindspots}} {{verdict_kill_criteria}} {{verdict_unknowns}}
+  {{advisor_cards}}       — collapsible <details> per advisor
+  {{review_cards}}        — collapsible <details> per reviewer
+  {{anonymization_map}}   — e.g. "A=Committee 1, …"
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Council Verdict — {{slug}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..500&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #0d0e0f;
+  --bg-raised: #15161a;
+  --bg-sunken: #090a0b;
+  --ink:       #ece9e3;
+  --ink-soft:  #a6a39c;
+  --ink-faint: #6c6a64;
+  --line:        rgba(255,255,255,0.075);
+  --line-strong: rgba(255,255,255,0.15);
+  --accent:    #49d18a;   /* refined emerald — restrained, not neon */
+  --accent-ink:#79e2ac;
+  --accent-bg: rgba(73,209,138,0.09);
+  --accent-line: rgba(73,209,138,0.30);
+  /* semantic vote/data colors (desaturated for dark reading) */
+  --vote-a:    #d98a6a;
+  --vote-b:    #49d18a;
+  --vote-c:    #6ea6e6;
+  --vote-x:    #5d5c58;
+  --warn:      #e0a45c;
+  --radius:    14px;
+  --measure:   66ch;
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-serif:   'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.66;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-optical-sizing: auto;
+  min-height: 100vh;
+}
+/* faint neutral top vignette — depth without a green glow */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: radial-gradient(120% 50% at 50% -20%, rgba(255,255,255,0.035), transparent 60%);
+  pointer-events: none; z-index: 0;
+}
+
+/* pure-CSS scroll progress — useful for a long verdict, no JS */
+.progress {
+  position: fixed; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--accent); transform-origin: 0 50%; transform: scaleX(0);
+  z-index: 100;
+  animation: progressGrow linear both; animation-timeline: scroll(root);
+}
+@keyframes progressGrow { to { transform: scaleX(1); } }
+
+.page { position: relative; z-index: 1; max-width: 760px; margin: 0 auto; padding: 64px 28px 120px; }
+
+/* ───────── masthead ───────── */
+.eyebrow {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px; font-weight: 500; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--accent-ink);
+  padding-bottom: 18px;
+}
+h1 {
+  font-family: var(--font-display);
+  font-size: clamp(30px, 5.2vw, 46px);
+  font-weight: 700; letter-spacing: -0.022em; line-height: 1.07;
+  color: var(--ink);
+  text-wrap: balance;
+  margin-bottom: 22px;
+}
+
+/* honesty banner — composition of the panel */
+.mode-banner {
+  font-family: var(--font-mono);
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px;
+  font-size: 12px; line-height: 1.5; color: var(--ink-soft);
+  padding: 14px 16px; margin-bottom: 6px;
+  background: var(--bg-raised); border: 1px solid var(--line); border-radius: 10px;
+}
+.mode-banner strong { color: var(--accent-ink); font-weight: 700; letter-spacing: 0.04em; }
+.mode-banner span { color: var(--ink-soft); }
+.mode-banner code { color: var(--ink-faint); font-size: 11px; word-break: break-all; }
+.mode-banner.simulated { border-color: rgba(224,164,92,0.35); }
+.mode-banner.simulated strong { color: var(--warn); }
+
+/* ───────── result: scorecard + vote ───────── */
+.result { margin-top: 30px; }
+.scorecard {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+  background: var(--bg-raised);
+}
+.scorecard .metric { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.scorecard .metric .v {
+  font-family: var(--font-mono); font-size: 23px; font-weight: 700; letter-spacing: -0.02em;
+  color: var(--ink); line-height: 1.1;
+}
+.scorecard .metric .k {
+  font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--ink-faint); margin-top: 6px;
+}
+
+/* the vote */
+.vote-card { margin-top: 18px; padding: 22px 22px 24px; background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); }
+.vote-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.vote-head h3 { font-family: var(--font-display); font-size: 18px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+.vote-meta { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-faint); letter-spacing: 0.02em; }
+.vote-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--bg-sunken); margin-bottom: 18px; }
+.vote-seg { min-width: 3px; transition: flex .4s ease; }
+.vote-seg.vote--A, .vote-dot.vote--A, .stance--A { background: var(--vote-a); }
+.vote-seg.vote--B, .vote-dot.vote--B, .stance--B { background: var(--vote-b); }
+.vote-seg.vote--C, .vote-dot.vote--C, .stance--C { background: var(--vote-c); }
+.vote-seg.vote--ABSTAIN, .vote-dot.vote--ABSTAIN, .stance--ABSTAIN { background: var(--vote-x); }
+.vote-legend { list-style: none; display: grid; gap: 2px; margin-bottom: 16px; }
+.vote-legend li {
+  display: grid; grid-template-columns: 14px 18px 1fr auto; align-items: center; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--line);
+}
+.vote-legend li:last-child { border-bottom: 0; }
+.vote-dot { width: 10px; height: 10px; border-radius: 3px; }
+.vote-key { font-family: var(--font-mono); font-weight: 700; color: var(--ink); font-size: 13px; }
+.vote-lbl { color: var(--ink-soft); font-size: 14px; }
+.vote-tally { font-family: var(--font-mono); color: var(--ink); font-size: 14px; font-weight: 500; }
+.vote-tally .conf { color: var(--ink-faint); font-size: 11px; margin-left: 8px; }
+.vote-card p { color: var(--ink-soft); font-size: 15px; }
+
+/* ───────── framed question (de-emphasized, collapsible) ───────── */
+.framed { margin-top: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-sunken); overflow: hidden; }
+.framed > summary {
+  list-style: none; cursor: pointer; user-select: none;
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; color: var(--ink-soft);
+  padding: 13px 16px; display: flex; align-items: center; gap: 10px;
+}
+.framed > summary::-webkit-details-marker { display: none; }
+.framed > summary::before { content: '+'; color: var(--ink-faint); font-size: 15px; width: 12px; }
+.framed[open] > summary::before { content: '\2212'; }
+.framed > summary:hover { color: var(--ink); }
+.framed-body {
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.7; color: var(--ink-soft);
+  white-space: pre-wrap; word-break: break-word;
+  padding: 0 18px 18px; border-top: 1px solid var(--line); padding-top: 16px;
+}
+
+/* ───────── lede: the one thing to do first ───────── */
+.hero { position: relative; margin-top: 34px; padding: 28px 30px; background: var(--bg-raised); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius); }
+.hero-label { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent-ink); margin-bottom: 12px; }
+.hero-text { font-family: var(--font-serif); font-size: 21px; line-height: 1.5; font-weight: 450; color: var(--ink); letter-spacing: -0.005em; }
+.hero-text strong { font-weight: 600; }
+
+/* ───────── part dividers ───────── */
+.part { display: flex; align-items: baseline; gap: 16px; margin: 76px 0 8px; padding-top: 18px; border-top: 1px solid var(--line-strong); }
+.part-num { font-family: var(--font-mono); font-size: 12px; color: var(--accent-ink); font-weight: 700; }
+.part-title { font-family: var(--font-display); font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.2em; color: var(--ink-soft); }
+
+/* ───────── section headers + verdict bodies ───────── */
+h2 {
+  font-family: var(--font-display);
+  font-size: 25px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15;
+  color: var(--ink); margin: 44px 0 14px;
+}
+.verdict-section { max-width: var(--measure); color: var(--ink); }
+.verdict-section p { margin-bottom: 15px; }
+.verdict-section p:last-child { margin-bottom: 0; }
+.verdict-section strong { color: var(--ink); font-weight: 600; }
+.verdict-section em { color: var(--accent-ink); font-style: italic; }
+.verdict-section ul, .verdict-section ol { margin: 0 0 15px 22px; }
+.verdict-section li { margin-bottom: 9px; }
+.verdict-section li::marker { color: var(--accent); }
+
+/* the recommendation — the one emphasized verdict block */
+.recommendation {
+  max-width: none; margin-top: 4px;
+  padding: 26px 28px; background: linear-gradient(180deg, var(--accent-bg), transparent 80%);
+  border: 1px solid var(--accent-line); border-radius: var(--radius);
+}
+.recommendation p { font-size: 17.5px; }
+
+/* faction map renders strong camp names in accent */
+.factions .verdict-section strong, .verdict-section--factions strong { color: var(--accent-ink); }
+
+/* ───────── collapsible cards: advisors / committees / reviews ───────── */
+.advisor-grid { display: grid; gap: 8px; margin-top: 6px; }
+.toolbar { display: flex; justify-content: flex-end; margin: 2px 0 -2px; }
+.toolbar button {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--ink-soft);
+  background: transparent; border: 1px solid var(--line-strong); border-radius: 7px;
+  padding: 6px 11px; cursor: pointer; transition: color .2s, border-color .2s, background .2s;
+}
+.toolbar button:hover { color: var(--ink); border-color: var(--accent-line); background: var(--accent-bg); }
+
+.advisor-card, .review-card {
+  background: var(--bg-raised); border: 1px solid var(--line); border-radius: 11px;
+  overflow: hidden; transition: border-color .18s, background .18s;
+}
+.advisor-card:hover, .review-card:hover { border-color: var(--line-strong); }
+.advisor-card[open], .review-card[open] { border-color: var(--line-strong); background: var(--bg-raised); }
+.advisor-card summary, .review-card summary {
+  list-style: none; cursor: pointer; user-select: none;
+  display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+}
+.advisor-card summary::-webkit-details-marker, .review-card summary::-webkit-details-marker { display: none; }
+.advisor-card summary::after, .review-card summary::after {
+  content: ''; margin-left: auto; flex: none;
+  width: 8px; height: 8px; border-right: 1.5px solid var(--ink-faint); border-bottom: 1.5px solid var(--ink-faint);
+  transform: rotate(45deg); transition: transform .2s; align-self: center;
+}
+.advisor-card[open] summary::after, .review-card[open] summary::after { transform: rotate(225deg); }
+
+/* kind pill (Figure / Lens / Model) */
+.kind {
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+  padding: 3px 7px; border-radius: 5px; border: 1px solid currentColor; flex: none; opacity: 0.95;
+}
+.kind--figure { color: var(--vote-b); }
+.kind--lens   { color: var(--vote-c); }
+.kind--model  { color: var(--warn); }
+
+/* stance chip (B / C …) */
+.stance {
+  font-family: var(--font-mono); font-weight: 700; font-size: 12px; color: #0c0d0e;
+  display: inline-flex; align-items: baseline; gap: 3px; flex: none;
+  padding: 3px 7px; border-radius: 5px; min-width: 22px; justify-content: center;
+}
+.stance small { font-size: 9px; font-weight: 500; opacity: 0.7; }
+
+.advisor-name { font-family: var(--font-display); font-weight: 600; font-size: 14.5px; color: var(--ink); flex: none; max-width: 190px; letter-spacing: -0.01em; }
+.advisor-headline { color: var(--ink-soft); font-size: 14px; line-height: 1.4; flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.advisor-card[open] .advisor-headline { white-space: normal; }
+
+.advisor-body, .review-body {
+  padding: 4px 20px 20px; color: var(--ink); border-top: 1px solid var(--line); margin-top: 2px; padding-top: 16px;
+  max-width: var(--measure);
+}
+.advisor-body p, .review-body p { margin-bottom: 13px; }
+.advisor-body p:last-child, .review-body p:last-child { margin-bottom: 0; }
+.advisor-body strong, .review-body strong { color: var(--ink); font-weight: 600; }
+.advisor-body em, .review-body em { color: var(--accent-ink); }
+.advisor-body ul, .advisor-body ol, .review-body ul, .review-body ol { margin: 0 0 13px 20px; }
+.advisor-body li, .review-body li { margin-bottom: 7px; }
+.advisor-body li::marker, .review-body li::marker { color: var(--accent); }
+.advisor-body code, .review-body code, .framed code { font-family: var(--font-mono); font-size: 0.85em; color: var(--accent-ink); }
+
+/* ───────── footer ───────── */
+.footer {
+  margin-top: 80px; padding-top: 22px; border-top: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-faint);
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+}
+.footer code { color: var(--ink-soft); }
+.footer-built { flex-basis: 100%; text-align: center; margin-top: 10px; color: var(--ink-faint); }
+.footer-built a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid var(--line); }
+.footer-built a:hover { color: var(--accent-ink); }
+
+/* ───────── motion (tasteful, above-the-fold only) ───────── */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal { opacity: 0; transform: translateY(12px); animation: rise .6s cubic-bezier(.16,1,.3,1) forwards; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress { animation: none; }
+  html { scroll-behavior: auto; }
+}
+
+@media (max-width: 600px) {
+  .page { padding: 40px 18px 64px; }
+  body { font-size: 16px; }
+  .vote-legend li { grid-template-columns: 12px 16px 1fr; row-gap: 0; }
+  .vote-tally { grid-column: 2 / -1; }
+  .advisor-name { max-width: 120px; }
+  .advisor-card summary, .review-card summary { flex-wrap: wrap; gap: 8px; }
+  .advisor-headline { flex-basis: 100%; white-space: normal; }
+}
+</style>
+</head>
+<body>
+<div class="progress" aria-hidden="true"></div>
+<div class="page">
+
+  <header class="masthead reveal">
+    <span class="eyebrow">Council Verdict / {{mode}}</span>
+    <h1>{{question_raw}}</h1>
+    {{mode_banner}}
+  </header>
+
+  <section class="result reveal" style="animation-delay:.07s">
+    {{diversity_scorecard}}
+    {{senate_vote}}
+  </section>
+
+  <details class="framed reveal" style="animation-delay:.12s">
+    <summary>The question, as the council saw it</summary>
+    <pre class="framed-body">{{question_framed}}</pre>
+  </details>
+
+  <section class="hero reveal" style="animation-delay:.16s">
+    <div class="hero-label">The one thing to do first</div>
+    <div class="hero-text">{{verdict_one_thing}}</div>
+  </section>
+
+  <div class="part"><span class="part-num">I</span><h2 class="part-title">The Verdict</h2></div>
+
+  <h2>The Recommendation</h2>
+  <div class="verdict-section recommendation">
+    {{verdict_recommendation}}
+  </div>
+
+  <h2>Where the Council Agrees</h2>
+  <div class="verdict-section">
+    {{verdict_agrees}}
+  </div>
+
+  <h2>Where the Council Clashes</h2>
+  <div class="verdict-section">
+    {{verdict_clashes}}
+  </div>
+
+  <h2>Blind Spots the Council Caught</h2>
+  <div class="verdict-section">
+    {{verdict_blindspots}}
+  </div>
+
+  <h2>Kill Criteria</h2>
+  <div class="verdict-section">
+    {{verdict_kill_criteria}}
+  </div>
+
+  <h2>What the Council Doesn't Know</h2>
+  <div class="verdict-section">
+    {{verdict_unknowns}}
+  </div>
+
+  <!-- Senate-only: how the house split (empty string for modes 1-4) -->
+  {{senate_factions}}
+
+  <div class="part"><span class="part-num">II</span><h2 class="part-title">The Record</h2></div>
+
+  <!-- Senate-only: the committee briefs (empty string for modes 1-4) -->
+  {{committee_briefs}}
+
+  <h2>Advisor Responses</h2>
+  <div class="advisor-grid">
+    {{advisor_cards}}
+  </div>
+
+  <h2>Peer Reviews</h2>
+  <div class="advisor-grid">
+    {{review_cards}}
+  </div>
+
+  <div class="footer">
+    <div>Counciled <code>{{timestamp}}</code> &middot; <code>{{slug}}</code></div>
+    <div>Anonymization map: <code>{{anonymization_map}}</code></div>
+    <div class="footer-built">Made by <a href="https://github.com/rolandal">Roland Ligtenberg</a> &middot; built with his agent <a href="http://roland.bot">roland.bot</a> 🤖</div>
+  </div>
+
+</div>
+
+<script>
+/* progressive: add an expand/collapse-all control above each long card grid.
+   Cards work individually without JS; this only adds a convenience toggle. */
+(function () {
+  document.querySelectorAll('.advisor-grid').forEach(function (grid) {
+    var cards = grid.querySelectorAll('details');
+    if (cards.length < 3) return;
+    var bar = document.createElement('div');
+    bar.className = 'toolbar';
+    var btn = document.createElement('button');
+    btn.textContent = 'Expand all';
+    btn.addEventListener('click', function () {
+      var open = btn.textContent === 'Expand all';
+      cards.forEach(function (d) { d.open = open; });
+      btn.textContent = open ? 'Collapse all' : 'Expand all';
+    });
+    bar.appendChild(btn);
+    grid.parentNode.insertBefore(bar, grid);
+  });
+})();
+</script>
+</body>
+</html>
