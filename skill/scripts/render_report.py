@@ -15,7 +15,10 @@ Bundle schema (keys optional unless noted):
   framed (str, required) · tally {counts, total, confidence_by_stance, leader}
   tallyStr (str) · members [{label, kind, stance, confidence, reason, analysis?}]
   committees [[label,...]] · briefs [{committee, labels, miniTally, text}]
-  reviews [str] · verdict (str, required) · factions (str) · anonMap {letter:idx}
+  reviews [str] · verdict (str, required) · factions (str)
+  anonMap — {letter: committee idx} ints (rendered "A=Committee <idx+1>") OR the
+  `map` returned by anonymize.py verbatim ({"Response A": "Committee 3"}, string
+  values rendered as-is)
   convergence (float) · stanceLabels {letter: label} (overrides default A/B/C names)
 
   python3 render_report.py --bundle-file b.json --slug sleep-training-senate \
@@ -228,20 +231,65 @@ def _scorecard(members, tally, conv):
         '</div>')
 
 
-def _banner(mode, tier, members, native_model, model_ids):
+def _fmt_duration(sec):
+    """Format a number of seconds as 'Xm Ys'; empty string if not numeric."""
+    try:
+        sec = int(round(float(sec)))
+    except (TypeError, ValueError):
+        return ""
+    m, s = divmod(max(sec, 0), 60)
+    return f"{m}m {s}s"
+
+
+def run_stats_line(run_stats, *, escape_html=True):
+    """Build the compact 'N seats · Xm Ys · N,NNN tokens · ~$X.XX model spend' line.
+
+    Every part is optional and only included if provided; returns '' if the
+    dict is empty/None/has no usable parts (renderer must then add nothing).
+    escape_html=True (HTML output) escapes string values and joins with the
+    `&middot;` entity; escape_html=False (plain-text transcript) joins with a
+    literal middot and leaves strings unescaped.
+    """
+    if not run_stats:
+        return ""
+    esc = html.escape if escape_html else str
+    parts = []
+    if run_stats.get("seats") is not None:
+        parts.append(f'{esc(str(run_stats["seats"]))} seats')
+    duration = run_stats.get("duration")
+    if duration:
+        parts.append(esc(str(duration)))
+    elif run_stats.get("durationSec") is not None:
+        d = _fmt_duration(run_stats["durationSec"])
+        if d:
+            parts.append(d)
+    if run_stats.get("tokens") is not None:
+        try:
+            parts.append(f'{int(run_stats["tokens"]):,} tokens')
+        except (TypeError, ValueError):
+            pass
+    if run_stats.get("modelSpend"):
+        parts.append(f'~{esc(str(run_stats["modelSpend"]))} model spend')
+    return (" &middot; " if escape_html else " · ").join(parts)
+
+
+def _banner(mode, tier, members, native_model, model_ids, run_stats=None):
     nf = sum(1 for m in members if m.get("kind") == "figure")
     ns = sum(1 for m in members if m.get("kind") == "style")
     nm = sum(1 for m in members if m.get("kind") == "model")
     ids = model_ids or [m["label"] for m in members if m.get("kind") == "model"]
     ids_code = f'<code>{html.escape(" · ".join(ids))}</code>' if ids else ""
+    stats = run_stats_line(run_stats)
+    stats_html = f'<span class="run-stats">{stats}</span>' if stats else ""
     if mode.lower() == "senate":
         return (f'<div class="mode-banner"><strong>SENATE &middot; {html.escape(tier)}</strong>'
                 f'<span>{len(members)} seats: {nf} figures + {ns} lenses '
                 f'(native, {html.escape(native_model)}) + {nm} real model seats</span>'
                 f'{ids_code}'
-                f'<span>Clerk / Whips / Reviewers / Chairman on Opus, max effort</span></div>')
+                f'<span>Clerk / Whips / Reviewers / Chairman on Opus, max effort</span>'
+                f'{stats_html}</div>')
     return (f'<div class="mode-banner"><strong>{html.escape(mode)}</strong>'
-            f'<span>{len(members)} advisors</span>{ids_code}</div>')
+            f'<span>{len(members)} advisors</span>{ids_code}{stats_html}</div>')
 
 
 # ───────────────────────── public API ─────────────────────────
@@ -259,6 +307,7 @@ def build_report(bundle, *, template, slug, date, raw_title,
     framed = bundle.get("framed", "")
     anon = bundle.get("anonMap", {})
     conv = bundle.get("convergence", 0)
+    run_stats = bundle.get("runStats") or {}
     ts = timestamp or datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     stance_lbl = {**STANCE_LBL, **(bundle.get("stanceLabels") or {})}
 
@@ -268,13 +317,17 @@ def build_report(bundle, *, template, slug, date, raw_title,
     committee_briefs = _brief_cards(briefs)
 
     one_thing = re.sub(r"\s+", " ", _sec(S, "one thing")).strip()
-    anon_str = ", ".join(f"{k}=Committee {v + 1}" for k, v in sorted(anon.items()))
+    # anonMap values: int committee index -> "A=Committee 3"; string (anonymize.py's
+    # map, e.g. {"Response A": "Committee 3"}) -> rendered as-is.
+    anon_str = ", ".join(
+        f"{k}={v}" if isinstance(v, str) else f"{k}=Committee {v + 1}"
+        for k, v in sorted(anon.items()))
 
     repl = {
         "{{slug}}": slug, "{{mode}}": mode, "{{timestamp}}": ts,
         "{{question_raw}}": html.escape(raw_title),
         "{{question_framed}}": html.escape(framed),
-        "{{mode_banner}}": _banner(mode, tier, members, native_model, model_ids),
+        "{{mode_banner}}": _banner(mode, tier, members, native_model, model_ids, run_stats),
         "{{diversity_scorecard}}": _scorecard(members, tally, conv),
         "{{senate_vote}}": senate_vote,
         "{{senate_factions}}": senate_factions,
@@ -301,7 +354,8 @@ def build_report(bundle, *, template, slug, date, raw_title,
     transcript = _build_transcript(bundle, slug=slug, date=date, ts=ts, mode=mode, tier=tier,
                                     members=members, committees=committees, briefs=briefs,
                                     reviews=reviews, verdict=verdict, factions_raw=factions_raw,
-                                    framed=framed, tally=tally, anon=anon, conv=conv, model_ids=model_ids)
+                                    framed=framed, tally=tally, anon=anon, conv=conv, model_ids=model_ids,
+                                    run_stats=run_stats)
     return {"html": out, "transcript": transcript}
 
 
@@ -314,14 +368,18 @@ def _ballot_table(members):
 
 
 def _build_transcript(bundle, *, slug, date, ts, mode, tier, members, committees, briefs,
-                      reviews, verdict, factions_raw, framed, tally, anon, conv, model_ids):
+                      reviews, verdict, factions_raw, framed, tally, anon, conv, model_ids,
+                      run_stats=None):
     nf = sum(1 for m in members if m.get("kind") == "figure")
     ns = sum(1 for m in members if m.get("kind") == "style")
     nm = sum(1 for m in members if m.get("kind") == "model")
     t = [f"# Council Transcript — {slug}\n",
-         f"**Date:** {ts}  ·  **Mode:** {mode} ({tier})  ·  **Seats:** {len(members)}\n",
-         f"## Framed Question\n\n```\n{framed}\n```\n",
-         f"## The Vote\n\n{bundle.get('tallyStr', '')}\n\n### Ballots\n\n{_ballot_table(members)}\n"]
+         f"**Date:** {ts}  ·  **Mode:** {mode} ({tier})  ·  **Seats:** {len(members)}\n"]
+    stats = run_stats_line(run_stats, escape_html=False)
+    if stats:
+        t.append(f"**Run stats:** {stats}\n")
+    t.append(f"## Framed Question\n\n```\n{framed}\n```\n")
+    t.append(f"## The Vote\n\n{bundle.get('tallyStr', '')}\n\n### Ballots\n\n{_ballot_table(members)}\n")
     if committees:
         t.append("## Committees\n\n" + "\n".join(
             f"- **Committee {i + 1}:** {', '.join(c)}" for i, c in enumerate(committees)) + "\n")

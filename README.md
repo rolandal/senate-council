@@ -5,7 +5,7 @@
 ![Claude Code skill](https://img.shields.io/badge/Claude_Code-skill-da7756)
 ![modes](https://img.shields.io/badge/modes-5-00e87a)
 ![Senate](https://img.shields.io/badge/Senate-~36_seats-00b0ff)
-![tests](https://img.shields.io/badge/tests-98_passing-2ea44f)
+![tests](https://img.shields.io/badge/tests-162_passing-2ea44f)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 **Made by [Roland Ligtenberg](https://github.com/rolandal) &nbsp;·&nbsp; built with his agent [`roland.bot`](http://roland.bot) 🤖**
@@ -143,11 +143,11 @@ The Senate swaps stages 2–4 for the caucus map-reduce shown above. Every membe
 | `skill/packs/` | the rosters — `figures/` (23) · `styles/` · `models/` · `mixed/` · `senate/` |
 | `skill/scripts/` | pure helpers — OpenRouter dispatch, ballot tally, committee sort, input gate, quorum gate, report renderer |
 | `skill/report-template.html` | the dark-glass report scaffold |
-| `tests/` | 98 tests — pack contracts, tally/committee/quorum/input-gate logic, renderer, golden snapshot |
+| `tests/` | 162 tests — pack contracts, tally/committee/quorum/input-gate logic, renderer, golden snapshot |
 | `ARCHITECTURE.md` · `CHANGELOG.md` | how it works · history |
 
 ```bash
-cd senate-council && .venv/bin/python -m pytest tests/ -q   # 98 passed
+cd senate-council && .venv/bin/python -m pytest tests/ -q   # 162 passed
 ```
 
 ---

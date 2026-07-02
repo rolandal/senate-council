@@ -142,8 +142,10 @@ what to do when they close this report.
 
 ## Kill Criteria
 2–4 dated, falsifiable conditions that would prove this recommendation WRONG and
-should trigger a reversal. Be specific and measurable (e.g. "if by <date> metric
-X is below Y, abandon this path").
+should trigger a reversal. Be specific and measurable, and date each with an
+ABSOLUTE calendar date — ISO (`2026-07-15`) or "by July 15, 2026" — never a
+relative phrase like "within 3 weeks" (the kill-criteria ledger can only track
+absolute dates). E.g. "if by 2026-07-15 metric X is below Y, abandon this path".
 
 ## What the Council Doesn't Know
 The honest unknowns — the assumptions this verdict rests on, the data nobody had,

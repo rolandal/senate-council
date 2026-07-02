@@ -3,15 +3,20 @@
 
 Usage:
   python3 council_models.py --prompt-file framed.txt [--roster ../packs/models/roster.md]
-                            [--timeout 90] [--seats 4]
+                            [--timeout 90] [--seats 4] [--retries 1]
 
 Prints a JSON array, one object per seat:
   [{"seat":0,"label":"GPT-5.1","model_id":"openai/gpt-5.1","ok":true,
-    "content":"...","latency_ms":1234,"error":null}, ...]
+    "content":"...","latency_ms":1234,"error":null,"attempts":1,
+    "usage":{"prompt_tokens":123,"completion_tokens":45,"total_tokens":168}}, ...]
 
 Stdlib only (urllib + asyncio + threads). Graceful degradation: a failed seat
-returns ok=false with an error string and never raises; the caller proceeds as
-long as >=3 seats are ok. The key is never printed.
+returns ok=false with the error string from its LAST attempt and never raises;
+the caller proceeds as long as >=3 seats are ok. --retries sets the number of
+EXTRA attempts per seat after a failure (default 1 = try twice total), with a
+1.5*attempt second backoff between attempts. Every seat result also carries
+"attempts" (int) and "usage" (the OpenRouter usage dict, or null). The key is
+never printed.
 """
 import argparse
 import asyncio
@@ -66,7 +71,7 @@ def load_roster(path):
 
 
 def _post(model_id, prompt, key, timeout):
-    """Blocking POST to OpenRouter; returns the assistant content string."""
+    """Blocking POST to OpenRouter; returns (content, usage_dict_or_None)."""
     payload = json.dumps({
         "model": model_id,
         "messages": [{"role": "user", "content": prompt}],
@@ -77,27 +82,57 @@ def _post(model_id, prompt, key, timeout):
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         data = json.loads(resp.read().decode())
-    return data["choices"][0]["message"]["content"]
+    content = data["choices"][0]["message"]["content"]
+    usage = data.get("usage")
+    return content, usage
 
 
-async def query_model(seat, prompt, key, timeout):
+def _call_with_retries(model_id, prompt, key, timeout, retries):
+    """Blocking. Calls _post up to (retries + 1) times with 1.5*attempt backoff
+    between attempts. Returns (content, usage, attempts, error) — error is None
+    on success, else the string form of the LAST exception seen.
+    """
+    attempts = 0
+    last_err = None
+    max_attempts = max(1, retries + 1)
+    while attempts < max_attempts:
+        attempts += 1
+        try:
+            content, usage = _post(model_id, prompt, key, timeout)
+            return content, usage, attempts, None
+        except Exception as e:  # noqa: BLE001 — graceful degradation is the whole point
+            last_err = f"{type(e).__name__}: {e}"
+            if attempts < max_attempts:
+                time.sleep(1.5 * attempts)
+    return None, None, attempts, last_err
+
+
+async def query_model(seat, prompt, key, timeout, retries=1):
     """Run one seat; never raises. Returns the seat result dict."""
     start = time.time()
     out = {"seat": seat["_i"], "label": seat["label"], "model_id": seat["model_id"],
-           "ok": False, "content": "", "latency_ms": 0, "error": None, "ballot": None}
+           "ok": False, "content": "", "latency_ms": 0, "error": None, "ballot": None,
+           "attempts": 0, "usage": None}
     try:
-        content = await asyncio.to_thread(_post, seat["model_id"], prompt, key, timeout)
-        out["ok"] = True
-        out["content"] = content
-        out["ballot"] = parse_ballot(content)
+        content, usage, attempts, err = await asyncio.to_thread(
+            _call_with_retries, seat["model_id"], prompt, key, timeout, retries,
+        )
+        out["attempts"] = attempts
+        if err is None:
+            out["ok"] = True
+            out["content"] = content
+            out["usage"] = usage
+            out["ballot"] = parse_ballot(content)
+        else:
+            out["error"] = err
     except Exception as e:  # noqa: BLE001 — graceful degradation is the whole point
         out["error"] = f"{type(e).__name__}: {e}"
     out["latency_ms"] = int((time.time() - start) * 1000)
     return out
 
 
-async def run_council(prompt, seats, key, timeout):
-    tasks = [query_model(s, prompt, key, timeout) for s in seats]
+async def run_council(prompt, seats, key, timeout, retries=1):
+    tasks = [query_model(s, prompt, key, timeout, retries) for s in seats]
     return await asyncio.gather(*tasks)
 
 
@@ -107,6 +142,8 @@ def main():
     ap.add_argument("--roster", default=str(DEFAULT_ROSTER))
     ap.add_argument("--timeout", type=int, default=90)
     ap.add_argument("--seats", type=int, default=0, help="limit to first N seats (0 = all)")
+    ap.add_argument("--retries", type=int, default=1,
+                    help="extra attempts per seat after a failure (default 1 = try twice total)")
     ap.add_argument("--ballot", action="store_true",
                     help="append the Senate ballot instruction to the prompt")
     args = ap.parse_args()
@@ -121,7 +158,7 @@ def main():
         s["_i"] = i
 
     key = load_key()
-    results = asyncio.run(run_council(prompt, seats, key, args.timeout))
+    results = asyncio.run(run_council(prompt, seats, key, args.timeout, args.retries))
     ok = [r for r in results if r["ok"]]
     if len(ok) < MIN_OK:
         # still print results so the caller can show errors, but flag via exit code

@@ -74,9 +74,10 @@ Which full-house panel?
 
 (An explicit `council me mixed` / `council me senate` skips both steps and goes straight to that mode.)
 
-**C. Capability detection** (only for Models / Mixed): run `bash scripts/detect-providers.sh` → JSON `{openrouter_key, clis, claude_models, tier}`.
+**C. Capability detection** (only for Models / Mixed): run `bash scripts/detect-providers.sh` → JSON `{openrouter_key, clis, claude_models, tier, roster_resolved_at, roster_age_days, roster_stale}`.
 - `tier == "real"` → proceed with OpenRouter.
 - no key → tell the user the exact setup line (`echo 'sk-or-...' > ~/.claude/.openrouter-key && chmod 600 ~/.claude/.openrouter-key`) and offer to run **Figures** or **Styles** instead, OR an explicitly-labeled simulated run only if they confirm. Never silently simulate.
+- `roster_stale == true` (roster not re-resolved in the last 30 days) → warn the user and suggest `python3 scripts/resolve_models.py --write --date <today>` before a Models/Mixed/Senate run. Warn, do not block — proceed on the existing roster if they decline.
 
 **D. Roster selection** (mode-specific):
 - **Styles:** default pack from `packs/styles/default.md`; add opt-in lenses from `packs/styles/extras.md` via `+systems`/`+inverter`/`+redteam`.
@@ -90,7 +91,8 @@ Which full-house panel?
 
 | If the question mentions... | Load |
 |---|---|
-| "we already...", "last time...", past decisions | prior councils on this topic (search `council-log/`, memory) |
+| "we already...", "last time...", past decisions | prior councils on this topic — check `council-log/index.json` (built by `scripts/build_index.py`) instead of grepping filenames |
+| A new council convenes on a topic that overlaps a prior run | Check `council-log/kill-criteria.json` for overdue criteria on related topics (refreshed by `scripts/kill_criteria.py`) and surface them |
 
 Also Glob workspace for `CLAUDE.md`, `memory/`, `docs/decisions/`, `council-log/`. Read the 2–3 most relevant files. **Time budget: 30 seconds max.**
 
@@ -132,10 +134,27 @@ Spawn all members in a **single message**. Each returns 150–300 words (300–5
 
 The universal anti-sycophancy preamble (in `packs/styles/default.md` and `prompts.md`) is prepended to EVERY member, all modes.
 
+**Input gate before trusting any response (MANDATORY, all modes).** After
+assembling the member prompts and before dispatch, dump them as
+`[{label, prompt}]` and run
+`python3 scripts/check_inputs.py --prompts-file <prompts.json> --framed-file <framed.txt>`.
+This is Critical Behavior 8 — it is not Senate-only; a Models/Figures/Styles/Mixed
+run can confabulate on an empty question exactly the same way. Do not trust a run
+until this gate passes.
+
 ## Stage 3: Anonymous Peer Review (parallel)
 
 1. Collect all member responses.
-2. Anonymize as **Response A through E** with a randomized mapping. Record the mapping privately (transcript only, not the report).
+2. Anonymize mechanically — never by hand. Write member responses to a temp file
+   as a `[{label, content}]` JSON array (the script errors on entries missing a
+   non-empty `label`/`content`) and run
+   `python3 scripts/anonymize.py --responses-file <f> --seed <n>`; it
+   shuffles deterministically, strips every identifying key, and returns
+   `{anonymized, map, seed}`. Put the returned `map` verbatim into the bundle's
+   `anonMap` (`render_report.py` accepts it as-is, or `{letter: committee-index}`
+   ints) — it surfaces in the transcript metadata and the report's anonymization
+   line, never in the reviewers' inputs. This replaces the old prose "shuffle
+   them yourself" instruction.
 3. Spawn reviewers in a **single message** (parallel `Agent` calls). Each answers: strongest response + why, biggest blind spot + what, what all missed. Reviewer prompt in `prompts.md` (includes the "name the flaw to update" anti-conformity directive and the dissent-quota rule).
 4. **Dissent quota:** if >70% of members converge, inject one counterfactual reviewer ("assume the consensus is wrong — why?").
 
@@ -149,7 +168,7 @@ One agent (model: `opus`) receives the framed question, all member responses **d
 3. Blind Spots the Council Caught
 4. The Recommendation (real answer, not "it depends" — may side with a lone dissenter)
 5. The One Thing to Do First (single concrete next step)
-6. **Kill Criteria** (dated, falsifiable — what would prove this wrong)
+6. **Kill Criteria** (dated with absolute calendar dates — ISO or "by <Month> <D>, <YYYY>", never relative phrases — falsifiable; what would prove this wrong)
 7. **What the Council Doesn't Know** (the honest unknowns)
 
 ## Mode 5: Senate (full-house map-reduce)
@@ -210,8 +229,15 @@ one stance (without it the vote fragments into separate buckets). Then the Clerk
 balanced, diverse committees. One whip per committee writes a ~250-word brief +
 mini-tally (Whip prompt).
 
-**Stage 3c — Brief peer review (∥).** Relabel the 6 briefs Response A–F
-(randomized map kept private) and run the existing reviewer prompt. Inject the
+**Stage 3c — Brief peer review (∥).** Relabel the 6 briefs mechanically — first
+reshape each brief to `{label, content}` (e.g.
+`{"label": "Committee 3", "content": <the brief's text>}`; the bundle's `briefs[]`
+carry their prose under `text`, which anonymize.py rejects), write them as a JSON
+array to `<briefs.json>`, then
+`python3 scripts/anonymize.py --responses-file <briefs.json> --seed <n> --prefix "Response"`
+— giving Response A–F (map kept out of the reviewers' inputs; put it in the
+bundle's `anonMap` verbatim) — and run the existing
+reviewer prompt. Inject the
 counterfactual reviewer if briefs converge >70%. **Skipped in `senate express`.**
 
 **Stage 4 — Chairman (1 agent, Opus).** The Extended Chairman prompt
@@ -239,7 +265,12 @@ council-YYYY-MM-DD-<slug>-transcript.md    # full transcript + anonymization map
 **Render with the committed script — do NOT hand-template.** Write the run to a
 bundle JSON (keys: `framed`, `tally`, `tallyStr`, `members[]`, `committees[]`,
 `briefs[]`, `reviews[]`, `verdict`, `factions`, `anonMap`, `convergence`,
-`stanceLabels`) and run:
+`stanceLabels`, and optionally `runStats`) and run:
+
+> **`runStats` is optional** — `{seats, durationSec, tokens, modelSpend}`. When
+> present and non-empty it renders one compact cost/latency line (e.g. "36 seats
+> · 4m 12s · 41,203 tokens · ~$1.23 model spend") inside the honesty banner, in
+> both the HTML and the transcript. Omit it and output is unchanged.
 
 > **`stanceLabels` is question-specific — always set it.** The vote bar shows
 > stance keys `A`/`B`/`C`, but what they *mean* is defined entirely by the ballot
@@ -262,7 +293,28 @@ Senate-aware and **degrades cleanly for modes 1-4** (no committees → the
 Senate-only blocks render empty; a 7-section verdict still maps). The one
 contract it depends on: the chairman verdict uses rigid `## ` section headers.
 
-After writing both files, deliver the HTML via `SendUserFile` (`status: "proactive"`); optionally also `open` it.
+After writing both files, run `python3 scripts/build_index.py` to refresh the
+council-log index (`index.json` + `index.html`), then
+`python3 scripts/kill_criteria.py --log-dir ~/Documents/Local/council-log` to
+refresh the Kill Criteria ledger (`kill-criteria.json` + `.md`) with this run's
+new criteria. Boxes checked off (`- [x]`) in `kill-criteria.md` survive the
+refresh and drop out of the overdue/upcoming report — check a box to resolve a
+criterion.
+
+Then deliver the HTML via `SendUserFile` (`status: "proactive"`); optionally also `open` it.
+
+### Run State & Resume
+
+Recommended for every Senate run (any mode may use it). A full run walks a fixed
+pipeline and a mid-run crash otherwise discards everything collected so far:
+
+- At frame time: `python3 scripts/run_state.py init --slug <slug>` — creates a
+  checkpoint dir with an empty manifest.
+- After each stage completes: `python3 scripts/run_state.py save --run-dir <d> --stage <name> --file <f>`
+  (stage names: `frame, prompts, gate_inputs, convene, gate_quorum, tally, committees, briefs, reviews, verdict, render`)
+  — copies that stage's artifact into the checkpoint dir.
+- On interruption/resume: `python3 scripts/run_state.py status --run-dir <d>`
+  reports which stages are saved and the first missing stage to resume from.
 
 ### Optional Vercel Deploy
 If invoked with `--deploy` or "share the verdict": copy the HTML into a Vercel project's `public/council/<slug>/index.html`, run `vercel --prod` from that project, and report the resulting `https://<your-project>.vercel.app/council/<slug>/` URL.
@@ -284,7 +336,7 @@ If invoked with `--deploy` or "share the verdict": copy the HTML into a Vercel p
 
 In each prompt include: *"Think deeply, take the depth you need, this is a high-stakes decision."*
 
-**Cost-optimized opt-in** (`/council fast` or "use sonnet for advisors"): drop figure/style members + reviewers to sonnet, keep chairman on opus. ~10× cheaper, ~80% quality. **Only when explicitly requested.** Per `quality-over-cost-default` in memory: for Roland, quality is the default.
+**Cost-optimized opt-in** (`/council fast` or "use sonnet for advisors"): drop figure/style members + reviewers to sonnet, keep chairman on opus. ~10× cheaper, ~80% quality. **Only when explicitly requested** — quality is the default.
 
 ## Red Flags — Stop and Reconsider
 
@@ -311,5 +363,9 @@ In each prompt include: *"Think deeply, take the depth you need, this is a high-
 - `scripts/assign_committees.py` — sort the roster into balanced, kind-diverse committees.
 - `scripts/check_inputs.py` — input-integrity gate: verifies every member prompt actually contained the framed question (catches silent confabulation when the question doesn't reach a seat).
 - `scripts/check_quorum.py` — roster-integrity gate before the reduce (fails on quorum shortfall **or** whole-kind drop).
+- `scripts/anonymize.py` — mechanized A–Z anonymization for peer review (shuffle, strip identifying keys, return the map).
 - `scripts/render_report.py` — fill `report-template.html` from a bundle → HTML + transcript (don't hand-template).
+- `scripts/build_index.py` — scans `council-log/` and writes `index.json` + `index.html`, a searchable log of prior runs.
+- `scripts/kill_criteria.py` — ledger of every chairman verdict's Kill Criteria across runs; flags overdue/upcoming.
+- `scripts/run_state.py` — resumable run checkpoints (init/save/status) so an interrupted run resumes instead of restarting.
 - `report-template.html` — dark glassmorphism HTML scaffold with placeholders.

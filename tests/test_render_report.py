@@ -88,6 +88,17 @@ def test_transcript_has_verdict_and_ballots():
     assert "Load-bearing reason" in out["transcript"] or "reason" in out["transcript"].lower()
 
 
+def test_anon_map_accepts_anonymize_string_values():
+    """bundle.anonMap may be anonymize.py's map verbatim ({"Response A": "Committee 3"});
+    string values must render as-is instead of crashing on `v + 1`."""
+    b = bundle()
+    b["anonMap"] = {"Response A": "Committee 2", "Response B": "Committee 1"}
+    out = rr.build_report(b, template=TEMPLATE, slug="x", date="2026-06-26",
+                          raw_title="Q?", mode="Senate", tier="Tiered")
+    assert "Response A=Committee 2" in out["html"]
+    assert "Response B=Committee 1" in out["html"]
+
+
 def test_injected_placeholder_survives():
     """A {{snake_case}} token inside advisor/verdict text must NOT be eaten by the cleanup pass."""
     b = bundle()
@@ -114,6 +125,38 @@ def test_sec_no_substring_collision_on_disagrees():
     html = rr.build_report(b, template=TEMPLATE, slug="x", date="2026-06-26",
                            raw_title="Q?", mode="Senate", tier="Tiered")["html"]
     assert "Decoy disagreement." not in html
+
+
+def test_run_stats_full_line_renders():
+    b = bundle()
+    b["runStats"] = {"seats": 36, "durationSec": 252, "tokens": 41203, "modelSpend": "$1.23"}
+    html = rr.build_report(b, template=TEMPLATE, slug="x", date="2026-06-26",
+                           raw_title="Q?", mode="Senate", tier="Tiered")["html"]
+    assert "run-stats" in html
+    assert "36 seats" in html
+    assert "4m 12s" in html
+    assert "41,203 tokens" in html
+    assert "~$1.23 model spend" in html
+
+
+def test_run_stats_partial_line_renders_only_given_parts():
+    b = bundle()
+    b["runStats"] = {"seats": 36, "duration": "4m 12s"}
+    html = rr.build_report(b, template=TEMPLATE, slug="x", date="2026-06-26",
+                           raw_title="Q?", mode="Senate", tier="Tiered")["html"]
+    assert "run-stats" in html
+    assert "36 seats" in html
+    assert "4m 12s" in html
+    assert "tokens" not in html
+    assert "model spend" not in html
+
+
+def test_no_run_stats_key_renders_no_stats_artifacts():
+    b = bundle()
+    assert "runStats" not in b
+    html = rr.build_report(b, template=TEMPLATE, slug="x", date="2026-06-26",
+                           raw_title="Q?", mode="Senate", tier="Tiered")["html"]
+    assert "run-stats" not in html
 
 
 def test_degrades_without_senate_blocks():

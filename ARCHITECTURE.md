@@ -60,12 +60,16 @@ transcript + anonymization map + a `schema_version:1` metadata block).
 | `packs/senate/{roster,committees,prompts}.md` | Mode 5: union roster, committee sort, ballot/clerk/whip/chairman prompts |
 | `scripts/assign_committees.py` | Mode 5: pure balanced-committee sort |
 | `scripts/tally_ballots.py` | Mode 5: pure ballot parse + exact tally |
-| `scripts/check_inputs.py` | Mode 5: input-integrity gate after convene — verifies every member prompt contained the framed question; fails (exits non-zero) on the silent-confabulation failure where a seat votes on an empty/undefined question |
+| `scripts/check_inputs.py` | all modes: input-integrity gate after convene — verifies every member prompt contained the framed question; fails (exits non-zero) on the silent-confabulation failure where a seat votes on an empty/undefined question |
 | `scripts/check_quorum.py` | Mode 5: roster-integrity gate before reduce — fails on quorum shortfall **or** whole-kind drop (exits non-zero) |
+| `scripts/anonymize.py` | all modes: mechanized A–Z anonymization for peer review — deterministic shuffle, strips identifying keys, returns `{anonymized, map, seed}` |
 | `scripts/render_report.py` | all modes: fill `report-template.html` from a bundle → HTML + transcript |
-| `scripts/detect-providers.sh` | capability detection → JSON tier |
+| `scripts/build_index.py` | scans `council-log/` transcripts → `index.json` + standalone `index.html` (searchable prior-run log) |
+| `scripts/kill_criteria.py` | ledgers every chairman verdict's Kill Criteria across runs into `kill-criteria.json`/`.md`; `--check` reports overdue/upcoming |
+| `scripts/run_state.py` | resumable run checkpoints — `init`/`save`/`status` against a manifest so an interrupted run resumes instead of restarting |
+| `scripts/detect-providers.sh` | capability detection → JSON tier + roster staleness (`roster_resolved_at`/`roster_age_days`/`roster_stale`) |
 | `scripts/resolve_models.py` | OpenRouter `/models` → newest flagship per lab → roster.md |
-| `scripts/council_models.py` | parallel OpenRouter dispatch → JSON results |
+| `scripts/council_models.py` | parallel OpenRouter dispatch → JSON results (retries + token-usage capture) |
 | `report-template.html` | dark-glass HTML scaffold w/ `{{placeholders}}` |
 
 ## Modes in detail
@@ -87,16 +91,34 @@ transcript + anonymization map + a `schema_version:1` metadata block).
 
 ## Resilience & honesty invariants
 
-- Per-member timeout + graceful degradation (≥3 results to proceed) + chairman fallback.
+- Per-member timeout + graceful degradation (≥3 results to proceed) + chairman fallback,
+  now with a `--retries` backoff wrapper and per-seat token-usage capture in
+  `council_models.py`.
 - Universal anti-sycophancy preamble on every member, every mode.
-- Anonymized A–E peer review retained across all modes.
+- **The input-integrity gate (`check_inputs.py`) runs in every mode, not just Senate** —
+  a Models/Figures/Styles/Mixed run can confabulate on an empty question exactly
+  the way a Senate seat can, so Critical Behavior 8 gates convene everywhere.
+- Anonymized A–E peer review retained across all modes, now **mechanized**
+  (`scripts/anonymize.py`) instead of a prose "shuffle it yourself" instruction —
+  a deterministic seed, stripped identifying keys, and a map that never leaves
+  the transcript.
+- Runs are resumable: `scripts/run_state.py` checkpoints each pipeline stage to a
+  manifest so a mid-run crash resumes instead of restarting from zero.
+- Reports can carry an optional `runStats` bundle key (seats/duration/tokens/spend)
+  that renders a compact cost/latency line in the honesty banner; absent, output
+  is byte-identical to before.
 - Keys never printed or committed; a pre-commit grep guards against leaking secrets.
 
 ## Testing
 
 `tests/` (pytest, run via `.venv`): `test_packs.py` validates every figure's frontmatter
 + sections + the default panel; `test_resolve_models.py` and `test_council_models.py`
-cover the scripts with mocked HTTP (no network, no key). 36 tests.
+cover the model-dispatch scripts (retries + usage capture) with mocked HTTP (no
+network, no key); `test_anonymize.py`, `test_build_index.py`, `test_kill_criteria.py`,
+and `test_run_state.py` cover the four new v1.4 scripts; `test_render_report.py`
+includes the `runStats` banner line; `test_check_inputs.py`, `test_check_quorum.py`,
+`test_skill_routing.py`, and `test_report_template.py` guard the gates and the
+orchestration prose itself. 98+ tests.
 
 ## Provenance
 

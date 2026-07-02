@@ -23,3 +23,8 @@ build/
 # Local scratch / generated council outputs (live in ~/Documents/Local/council-log)
 scratchpad/
 *.local.md
+
+# Knowledge-graph tooling state (graphify / GSD) — regenerable, local only
+graphify-out/
+.planning/
+.pytest_cache/

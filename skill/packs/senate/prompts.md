@@ -124,6 +124,9 @@ A single concrete next step. Not a list. ONE thing.
 
 ## Kill Criteria
 2-4 dated, falsifiable conditions that would prove this recommendation WRONG.
+Date each with an ABSOLUTE calendar date — ISO (`2026-07-15`) or
+"by July 15, 2026" — never a relative phrase like "within 3 weeks" (the
+kill-criteria ledger can only track absolute dates).
 
 ## What the Council Doesn't Know
 The honest unknowns — assumptions, missing data, the questions that would most

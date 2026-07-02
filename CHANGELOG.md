@@ -1,5 +1,44 @@
 # Changelog
 
+## v1.4 — 2026-07-02 · Gates everywhere, mechanical anonymization, resumable runs
+
+Ten smaller hardening/quality-of-life improvements, all additive and backward
+compatible.
+
+- **`scripts/council_models.py`** — `--retries` flag (default 1 extra attempt)
+  with backoff, plus per-seat token-usage capture (`attempts`, `usage` keys on
+  every result).
+- **`scripts/anonymize.py`** — mechanizes the A–Z peer-review anonymization step
+  (deterministic seed, strips identifying keys, returns `{anonymized, map, seed}`).
+  SKILL.md's Stage 3 (and Senate Stage 3c) now run this instead of instructing
+  the orchestrating agent to hand-shuffle.
+- **`scripts/detect-providers.sh`** — now also emits `roster_resolved_at` /
+  `roster_age_days` / `roster_stale`; SKILL.md warns (does not block) when the
+  roster is stale and points at `resolve_models.py --write`.
+- **The input-integrity gate now runs in every mode**, not just Senate —
+  Critical Behavior 8 / `check_inputs.py` moves into Stage 2 for Models,
+  Figures, Styles, and Mixed, since the silent-confabulation failure it catches
+  isn't Senate-specific.
+- **`scripts/build_index.py`** — scans `council-log/` and writes a searchable
+  `index.json` + standalone dark `index.html`; SKILL.md's Output stage runs it
+  after every render, and Stage 1's lazy-load table points prior-council lookups
+  at the index instead of grepping filenames.
+- **`scripts/kill_criteria.py`** — a standing ledger of every chairman verdict's
+  Kill Criteria across runs (`kill-criteria.json`/`.md`), with `--check` reporting
+  overdue/upcoming items; SKILL.md refreshes it after every render and Stage 1
+  now surfaces overdue criteria on related topics when a new council convenes.
+- **`scripts/render_report.py`** — optional bundle key `runStats`
+  (`{seats, durationSec, tokens, modelSpend}`) renders a compact cost/latency
+  line inside the existing honesty banner; absent, output is unchanged.
+- **`scripts/run_state.py`** — resumable run checkpoints (`init`/`save`/`status`
+  against a manifest) so a Senate run interrupted mid-pipeline resumes at the
+  right stage instead of restarting from zero. New "Run State & Resume" section
+  in SKILL.md.
+- Docs: `ARCHITECTURE.md` file map + resilience/testing sections and
+  `skill/README.md` updated for the four new scripts.
+- Tests: 98 → 162 (coverage for all six new/changed scripts plus the
+  runStats banner line).
+
 ## v1.3 — 2026-06-26 · Input-integrity gate + golden fixture
 
 Lessons from a second Senate run (a fictional, repo-safe relocation dilemma built
