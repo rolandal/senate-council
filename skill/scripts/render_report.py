@@ -14,8 +14,13 @@ keep that header format rigid.
 Bundle schema (keys optional unless noted):
   framed (str, required) · tally {counts, total, confidence_by_stance, leader}
   tallyStr (str) · members [{label, kind, stance, confidence, reason, analysis?}]
+    — OR the pipeline shape [{label, kind, content}] (same objects fed to
+    tally_ballots/anonymize/check_quorum): the renderer parses the trailing
+    BALLOT line out of `content` into stance/confidence/reason/analysis itself.
   committees [[label,...]] · briefs [{committee, labels, miniTally, text}]
-  reviews [str] · verdict (str, required) · factions (str)
+    — OR [{label: "Committee N", text|content}]: index, member labels, and
+    miniTally are derived from the label digits + committees + member ballots.
+  reviews [str] — OR [{label, content}] · verdict (str, required) · factions (str)
   anonMap — {letter: committee idx} ints (rendered "A=Committee <idx+1>") OR the
   `map` returned by anonymize.py verbatim ({"Response A": "Committee 3"}, string
   values rendered as-is)
@@ -127,6 +132,81 @@ def _sorted_members(members):
     return sorted(members, key=lambda m: (KIND_ORDER.get(m.get("kind"), 9), m.get("label", "")))
 
 
+# ───────────────────────── pipeline-shape normalization ─────────────────────────
+# The rest of the pipeline (tally_ballots, anonymize, check_quorum) exchanges seats
+# as {label, kind, content}. Accept that shape here too: parse the BALLOT line out
+# of raw content instead of silently rendering "Ballot only" placeholder cards.
+_BALLOT_RE = re.compile(
+    r"BALLOT:\s*stance\s*=\s*(?P<stance>[^|]+?)\s*\|\s*confidence\s*=\s*(?P<conf>[^|]+?)"
+    r"\s*\|\s*reason\s*=\s*(?P<reason>.+)", re.I)
+
+
+def _canon_stance(raw):
+    s = (raw or "").strip().strip("*").strip()
+    if not s:
+        return "?"
+    if s.upper().startswith("ABSTAIN"):
+        return "ABSTAIN"
+    m = re.search(r"\boption\s+([A-Za-z])\b", s, re.I) or re.fullmatch(r"([A-Za-z])", s)
+    return m.group(1).upper() if m else s
+
+
+def _normalize_member(m):
+    """Fill analysis/stance/confidence/reason from raw `content` when absent."""
+    if m.get("analysis") or not m.get("content"):
+        return m
+    out = dict(m)
+    lines = out["content"].strip().splitlines()
+    ballot_idx = next((i for i in range(len(lines) - 1, -1, -1)
+                       if "BALLOT:" in lines[i].upper()), None)
+    if ballot_idx is not None:
+        bm = _BALLOT_RE.search(lines[ballot_idx].strip().strip("*"))
+        if bm:
+            out.setdefault("stance", _canon_stance(bm.group("stance")))
+            conf = bm.group("conf").strip()
+            out.setdefault("confidence", int(conf) if conf.isdigit() else conf)
+            out.setdefault("reason", bm.group("reason").strip().strip("*").strip())
+        analysis = "\n".join(lines[:ballot_idx]).strip()
+    else:
+        analysis = "\n".join(lines).strip()
+    if analysis:
+        out["analysis"] = analysis
+    return out
+
+
+def _normalize_brief(b, committees, members):
+    """Accept {label: 'Committee N', text|content} briefs; derive index/labels/miniTally."""
+    out = dict(b)
+    if not out.get("text") and out.get("content"):
+        out["text"] = out["content"]
+    if "committee" not in out:
+        dm = re.search(r"(\d+)", str(out.get("label", "")))
+        if dm:
+            out["committee"] = int(dm.group(1)) - 1
+    idx = out.get("committee")
+    if not out.get("labels") and isinstance(idx, int) and 0 <= idx < len(committees):
+        out["labels"] = committees[idx]
+    if not out.get("miniTally") and out.get("labels"):
+        by_label = {m.get("label"): m.get("stance") for m in members}
+        counts = {}
+        for lab in out["labels"]:
+            st = by_label.get(lab)
+            if st:
+                counts[st] = counts.get(st, 0) + 1
+        if counts:
+            out["miniTally"] = " · ".join(f"{v} {k}" for k, v in
+                                          sorted(counts.items(), key=lambda kv: -kv[1]))
+    return out
+
+
+def _normalize_review(r):
+    if isinstance(r, str):
+        return r
+    label = r.get("label") or "Reviewer"
+    body = r.get("content") or r.get("text") or ""
+    return f"{label}\n{body}"
+
+
 # ───────────────────────── block builders ─────────────────────────
 def _vote_block(tally, vote_prose="", stance_lbl=STANCE_LBL):
     if not tally or not tally.get("total"):
@@ -169,9 +249,10 @@ def _brief_cards(briefs):
     cards = []
     for b in briefs:
         labs = html.escape(", ".join(b.get("labels", [])))
+        name = b.get("label") or f'Committee {b.get("committee", 0) + 1}'
         cards.append(
             f'<details class="advisor-card"><summary>'
-            f'<span class="advisor-name">Committee {b.get("committee", 0) + 1}</span>'
+            f'<span class="advisor-name">{html.escape(name)}</span>'
             f'<span class="advisor-headline">{html.escape(b.get("miniTally", ""))} &middot; {labs}</span>'
             f'</summary><div class="advisor-body">{md_block(b.get("text", ""))}</div></details>')
     return '<h2>Committee Briefs</h2><div class="advisor-grid">' + "\n".join(cards) + "</div>"
@@ -297,11 +378,11 @@ def build_report(bundle, *, template, slug, date, raw_title,
                  mode="Senate", tier="Tiered", native_model="Sonnet 4.6", model_ids=None,
                  timestamp=None):
     """Return {'html': ..., 'transcript': ...} for the given bundle."""
-    members = bundle.get("members", [])
+    members = [_normalize_member(m) for m in bundle.get("members", [])]
     tally = bundle.get("tally", {})
     committees = bundle.get("committees") or []
-    briefs = bundle.get("briefs") or []
-    reviews = bundle.get("reviews") or []
+    briefs = [_normalize_brief(b, committees, members) for b in (bundle.get("briefs") or [])]
+    reviews = [_normalize_review(r) for r in (bundle.get("reviews") or [])]
     verdict = bundle.get("verdict", "")
     factions_raw = bundle.get("factions", "")
     framed = bundle.get("framed", "")
@@ -386,7 +467,8 @@ def _build_transcript(bundle, *, slug, date, ts, mode, tier, members, committees
     if factions_raw:
         t.append(f"## Clerk — Factions\n\n{factions_raw}\n")
     for b in briefs:
-        t.append(f"## Committee {b.get('committee', 0) + 1} Brief — {b.get('miniTally', '')}\n\n"
+        name = b.get("label") or f"Committee {b.get('committee', 0) + 1}"
+        t.append(f"## {name} Brief — {b.get('miniTally', '')}\n\n"
                  f"_Members: {', '.join(b.get('labels', []))}_\n\n{b.get('text', '')}\n")
     for i, r in enumerate(reviews):
         t.append(f"## Brief Peer Review {i + 1}\n\n{r}\n")

@@ -24,16 +24,18 @@ def parse_ballot(text):
         return out
     ballot_line = None
     for line in text.splitlines():
-        if re.match(r"\s*BALLOT\s*:", line, re.IGNORECASE):
-            ballot_line = line  # keep the last match
+        # tolerate markdown wrapping (e.g. "**BALLOT: ...**", "> `BALLOT: ...`")
+        stripped = line.strip().strip("*_`> ").strip()
+        if re.match(r"BALLOT\s*:", stripped, re.IGNORECASE):
+            ballot_line = stripped  # keep the last match
     if ballot_line is None:
         return out
-    body = re.sub(r"^\s*BALLOT\s*:\s*", "", ballot_line, flags=re.IGNORECASE)
+    body = re.sub(r"^BALLOT\s*:\s*", "", ballot_line, flags=re.IGNORECASE)
     fields = {}
     for part in body.split("|"):
         if "=" in part:
             k, _, v = part.partition("=")
-            fields[k.strip().lower()] = v.strip()
+            fields[k.strip().lower()] = v.strip().strip("*_`").strip()
     stance = fields.get("stance", "").strip()
     if not stance:
         return out
