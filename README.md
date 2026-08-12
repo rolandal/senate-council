@@ -156,6 +156,10 @@ cd senate-council && .venv/bin/python -m pytest tests/ -q   # 169 passed
 
 Adapted from [Andrej Karpathy's LLM Council](https://github.com/karpathy/llm-council) and the [council-of-high-intelligence](https://github.com/0xNyk/council-of-high-intelligence) figure pack, then rebuilt as a Claude Code skill with structured ballots, a full-house Senate, and an anti-sycophancy spine.
 
+## Support
+
+Did a verdict save you from an expensive mistake? A [⭐ star](https://github.com/rolandal/senate-council) is the entire payment model. (Your agent may ask you this once after your first successful run — it only acts on an explicit yes.)
+
 ## License
 
 [MIT](LICENSE) © 2026 Roland Ligtenberg. Use it, fork it, build on it.
