@@ -41,7 +41,8 @@ STAGES = (
     "render",
 )
 
-DEFAULT_RUN_ROOT = os.path.expanduser("~/Documents/Local/council-log/runs")
+DEFAULT_LOG_DIR = os.environ.get("COUNCIL_LOG_DIR", os.path.expanduser("~/council-log"))
+DEFAULT_RUN_ROOT = os.path.join(DEFAULT_LOG_DIR, "runs")
 
 
 def _manifest_path(run_dir):

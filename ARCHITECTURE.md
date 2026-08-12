@@ -43,7 +43,7 @@ only in **how the tuple is filled** — nothing else in the pipeline changes.
    emits the 7-section verdict: Agrees · Clashes · Blind Spots · Recommendation ·
    One Thing First · **Kill Criteria** · **What the Council Doesn't Know**.
 
-Output: `~/Documents/Local/council-log/council-YYYY-MM-DD-<slug>.html` (dark-glass report
+Output: `$COUNCIL_LOG_DIR/council-YYYY-MM-DD-<slug>.html` (default `~/council-log/`; dark-glass report
 with mode/honesty banner + epistemic diversity scorecard) and `…-transcript.md` (full
 transcript + anonymization map + a `schema_version:1` metadata block).
 

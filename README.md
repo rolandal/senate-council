@@ -85,7 +85,7 @@ You get an **exact vote**, **named factions** with the crux that divides them, a
 
 ## What you get
 
-Two artifacts per run, in `~/Documents/Local/council-log/`:
+Two artifacts per run, in the council log dir (`$COUNCIL_LOG_DIR`, default `~/council-log/`):
 
 - a **dark-glassmorphism HTML report** — vote bar, faction cards, every advisor's argument, the chairman's verdict — delivered straight to your chat, and
 - a **full markdown transcript** with the anonymization map and a machine-readable metadata block.

@@ -33,7 +33,7 @@ The skill reads the key from that file (or `OPENROUTER_API_KEY`). It **never** s
 
 ## Output
 
-Two files in `~/Documents/Local/council-log/`: a dark-glass HTML report (delivered in chat) and a full markdown transcript. See `../ARCHITECTURE.md` for internals.
+Two files in the council log dir (`$COUNCIL_LOG_DIR`, default `~/council-log/`): a dark-glass HTML report (delivered in chat) and a full markdown transcript. See `../ARCHITECTURE.md` for internals.
 
 After each run, `scripts/build_index.py` refreshes a searchable `index.json`/`index.html` of every prior council in the log dir, and `scripts/kill_criteria.py` refreshes a standing ledger of every chairman verdict's Kill Criteria (with `--check` to flag overdue ones). `scripts/anonymize.py` mechanizes the peer-review anonymization step, and `scripts/run_state.py` gives a run resumable checkpoints (`init`/`save`/`status`) so an interrupted Senate run doesn't restart from zero.
 

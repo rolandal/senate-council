@@ -27,7 +27,7 @@ Bundle schema (keys optional unless noted):
   convergence (float) · stanceLabels {letter: label} (overrides default A/B/C names)
 
   python3 render_report.py --bundle-file b.json --slug sleep-training-senate \
-      --raw-title "..." [--out-dir ~/Documents/Local/council-log] [--date YYYY-MM-DD] \
+      --raw-title "..." [--out-dir ~/council-log] [--date YYYY-MM-DD] \
       [--mode Senate] [--tier Tiered] [--native-model "Sonnet 4.6"] \
       [--model-ids "openai/gpt-5.5-pro,google/gemini-3.1-pro-preview,..."]
 """
@@ -35,6 +35,7 @@ import argparse
 import datetime
 import html
 import json
+import os
 import re
 from pathlib import Path
 
@@ -496,7 +497,7 @@ def main():
     ap.add_argument("--slug", required=True)
     ap.add_argument("--raw-title", required=True, help="the user's question, for the report H1")
     ap.add_argument("--template", default=str(Path(__file__).resolve().parent.parent / "report-template.html"))
-    ap.add_argument("--out-dir", default=str(Path.home() / "Documents" / "Local" / "council-log"))
+    ap.add_argument("--out-dir", default=os.environ.get("COUNCIL_LOG_DIR", str(Path.home() / "council-log")))
     ap.add_argument("--date", default=datetime.date.today().isoformat())
     ap.add_argument("--mode", default="Senate")
     ap.add_argument("--tier", default="Tiered")

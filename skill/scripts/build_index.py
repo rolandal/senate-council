@@ -20,11 +20,12 @@ Malformed or non-matching files are recorded in the "skipped" list and never
 fail the run.
 
   python3 build_index.py
-  python3 build_index.py --log-dir ~/Documents/Local/council-log --out-dir /tmp/out
+  python3 build_index.py --log-dir ~/council-log --out-dir /tmp/out
 """
 import argparse
 import html
 import json
+import os
 import re
 from pathlib import Path
 
@@ -209,7 +210,7 @@ def render_html(entries):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--log-dir", default=str(Path.home() / "Documents" / "Local" / "council-log"),
+    ap.add_argument("--log-dir", default=os.environ.get("COUNCIL_LOG_DIR", str(Path.home() / "council-log")),
                      help="directory holding *-transcript.md run logs")
     ap.add_argument("--out-dir", default=None, help="where to write index.json/index.html (default: --log-dir)")
     args = ap.parse_args()

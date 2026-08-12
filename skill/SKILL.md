@@ -255,7 +255,8 @@ assignments, clerk output, the 6 briefs, and a metadata block with `mode: senate
 
 ## Output
 
-Two files per session, written to `~/Documents/Local/council-log/`:
+Two files per session, written to the **council log dir** — `$COUNCIL_LOG_DIR` if
+set, else `~/council-log/` (all scripts below share this default):
 
 ```
 council-YYYY-MM-DD-<slug>.html             # visual report (branding-pages dark style)
@@ -288,14 +289,14 @@ python3 scripts/render_report.py --bundle-file <bundle.json> --slug <slug> \
 It fills `report-template.html` (vote bar, faction map, committee briefs, advisor
 + review cards, diversity scorecard, honesty banner), strips the template's
 instruction comment, and writes both the HTML and the transcript (with the YAML
-metadata block) to `--out-dir` (default `~/Documents/Local/council-log/`). It is
+metadata block) to `--out-dir` (default: the council log dir). It is
 Senate-aware and **degrades cleanly for modes 1-4** (no committees → the
 Senate-only blocks render empty; a 7-section verdict still maps). The one
 contract it depends on: the chairman verdict uses rigid `## ` section headers.
 
 After writing both files, run `python3 scripts/build_index.py` to refresh the
 council-log index (`index.json` + `index.html`), then
-`python3 scripts/kill_criteria.py --log-dir ~/Documents/Local/council-log` to
+`python3 scripts/kill_criteria.py --log-dir <council log dir>` to
 refresh the Kill Criteria ledger (`kill-criteria.json` + `.md`) with this run's
 new criteria. Boxes checked off (`- [x]`) in `kill-criteria.md` survive the
 refresh and drop out of the overdue/upcoming report — check a box to resolve a

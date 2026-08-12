@@ -28,8 +28,8 @@ refreshes (matched by criterion text), marks the entry `resolved` in
 kill-criteria.json, and excludes it from OVERDUE/UPCOMING — so a
 --fail-on-overdue failure can be cleared by checking off the criterion.
 
-  python3 kill_criteria.py --log-dir ~/Documents/Local/council-log
-  python3 kill_criteria.py --log-dir ~/Documents/Local/council-log \\
+  python3 kill_criteria.py --log-dir ~/council-log
+  python3 kill_criteria.py --log-dir ~/council-log \\
       --check --today 2026-07-02 [--fail-on-overdue]
 """
 import argparse
